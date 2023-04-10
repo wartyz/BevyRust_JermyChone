@@ -2,7 +2,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use bevy::window::PrimaryWindow;
-use crate::{Laser, LASER_SPRITE, Materials, Player, PLAYER_SPRITE, PlayerReadyFire, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
+use crate::{Laser, LASER_SPRITE, Materials, Player, PLAYER_SPRITE, PlayerReadyFire, SCALE, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
 
 //use crate::{GameTextures, PLAYER_LASER_SIZE, PLAYER_RESPAWN_DELAY, PLAYER_SIZE, PlayerState, SPRITE_SCALE, WinSize};
 //use crate::components::{FromPlayer, Laser, Movable, Player, SpriteSize, Velocity};
@@ -165,16 +165,24 @@ fn player_fire(
         if ready_fire.0 && kb.pressed(KeyCode::Space) {
             let x = player_tf.translation.x;
             let y = player_tf.translation.y;
-            commands.spawn(SpriteBundle {
-                texture: asset_server.load(LASER_SPRITE),
-                transform: Transform {
-                    translation: Vec3::new(x, y + 15., 0.),
+
+            let mut spawn_laser = |x_offset: f32| {
+                commands.spawn(SpriteBundle {
+                    texture: asset_server.load(LASER_SPRITE),
+                    transform: Transform {
+                        translation: Vec3::new(x + x_offset, y + 15., 0.),
+                        scale: Vec3::new(SCALE, SCALE, 1.),
+                        ..default()
+                    },
                     ..default()
-                },
-                ..default()
-            })
-                .insert(Laser)
-                .insert(Speed::default());
+                })
+                    .insert(Laser)
+                    .insert(Speed::default());
+            };
+            let x_offset = 144.0 / 4.0 - 5.0;
+            spawn_laser(x_offset);
+            spawn_laser(-x_offset);
+
             ready_fire.0 = false;
         }
 

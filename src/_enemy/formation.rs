@@ -2,7 +2,7 @@
 use bevy::prelude::{Component, Resource};
 use rand::{thread_rng, Rng};
 
-/// Component - Enemy Formation (per enemy)
+/// Component - Enemy Formation (per _enemy)
 #[derive(Clone, Component)]
 pub struct Formation {
     pub start: (f32, f32),

@@ -1,7 +1,8 @@
 // https://www.youtube.com/watch?v=Yb3vInxzKGE&t=445s
 
 mod player;
-// mod enemy;
+mod enemy;
+// mod _enemy;
 // mod components;
 
 //use std::collections::HashSet;
@@ -11,12 +12,13 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 use bevy::prelude::KeyCode::Sysrq;
 
 use bevy::window::PrimaryWindow;
+use crate::enemy::EnemyPlugin;
 use crate::player::PlayerPlugin;
 //use bevy::sprite::collide_aabb::collide;
-//use bevy::math::Vec3Swizzles;
+use bevy::math::Vec3Swizzles;
 
 //use crate::components::{Enemy, Explosion, ExplosionTimer, ExplosionToSpawn, FromEnemy, FromPlayer, Laser, Movable, Player, SpriteSize, Velocity};
-//use crate::enemy::EnemyPlugin;
+//use crate::_enemy::EnemyPlugin;
 //use crate::player::PlayerPlugin;
 
 // region:    --- Asset Constants
@@ -26,8 +28,8 @@ const PLAYER_SPRITE: &str = "player_a_01.png";
 // const PLAYER_SIZE: (f32, f32) = (144., 75.);
 const LASER_SPRITE: &str = "laser_a_01.png";
 // const PLAYER_LASER_SIZE: (f32, f32) = (9., 54.);
-//
-// const ENEMY_SPRITE: &str = "enemy_a_01.png";
+
+const ENEMY_SPRITE: &str = "enemy_a_01.png";
 // const ENEMY_SIZE: (f32, f32) = (144., 75.);
 // const ENEMY_LASER_SPRITE: &str = "laser_b_01.png";
 // const ENEMY_LASER_SIZE: (f32, f32) = (17., 55.);
@@ -35,7 +37,7 @@ const LASER_SPRITE: &str = "laser_a_01.png";
 // const EXPLOSION_SHEET: &str = "explo_a_sheet.png";
 // const EXPLOSION_LEN: usize = 16;
 //
-// const SPRITE_SCALE: f32 = 0.5;
+const SCALE: f32 = 0.5;
 //
 // // endregion: --- Asset Constants
 //
@@ -80,7 +82,7 @@ pub struct Materials {
 // struct GameTextures {
 //     player: Handle<Image>,
 //     player_laser: Handle<Image>,
-//     enemy: Handle<Image>,
+//     _enemy: Handle<Image>,
 //     enemy_laser: Handle<Image>,
 //     explosion: Handle<TextureAtlas>,
 // }
@@ -114,6 +116,16 @@ pub struct Materials {
 //         self.last_shot = -1.;
 //     }
 // }
+
+#[derive(Resource)]
+struct ActiveEnemies(u32);
+
+impl Default for ActiveEnemies {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 // endregion: --- Resources
 
 // region: Components
@@ -125,6 +137,9 @@ struct PlayerReadyFire(bool);
 
 #[derive(Component)]
 struct Laser;
+
+#[derive(Component)]
+struct Enemy;
 
 #[derive(Component)]
 struct Speed(f32);
@@ -151,16 +166,17 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin { primary_window, ..default() }))
         //.add_plugins(DefaultPlugins)
         //.insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
+        .init_resource::<ActiveEnemies>()
         .add_startup_system(setup)
 
-//
         .add_plugin(PlayerPlugin)
+        .add_plugin(EnemyPlugin)
 //         .add_plugin(EnemyPlugin)
 //
 
 //
 //         .add_system(movable_system)
-//         .add_system(player_laser_hit_enemy_system)
+        .add_system(laser_hit_enemy)
 //         .add_system(enemy_laser_hit_player_system)
 //         .add_system(explosion_to_spawn_system)
 //         .add_system(explosion_animation_system)
@@ -218,7 +234,7 @@ fn setup(
 //     let game_textures = GameTextures {
 //         player: asset_server.load(PLAYER_SPRITE),
 //         player_laser: asset_server.load(PLAYER_LASER_SPRITE),
-//         enemy: asset_server.load(ENEMY_SPRITE),
+//         _enemy: asset_server.load(ENEMY_SPRITE),
 //         enemy_laser: asset_server.load(ENEMY_LASER_SPRITE),
 //         explosion,
 //     };
@@ -249,32 +265,33 @@ fn setup(
 //         }
 //     }
 // }
-//
-// fn player_laser_hit_enemy_system(
-//     mut commands: Commands,
-//     mut enemy_count: ResMut<EnemyCount>,
-//     laser_query: Query<(Entity, &Transform, &SpriteSize), (With<Laser>, With<FromPlayer>)>,
-//     enemy_query: Query<(Entity, &Transform, &SpriteSize), With<Enemy>>,
-// ) {
+
+fn laser_hit_enemy(
+    mut commands: Commands,
+    //mut enemy_count: ResMut<EnemyCount>,
+    mut laser_query: Query<(Entity, &Transform, &Sprite, With<Laser>)>,
+    mut enemy_query: Query<(Entity, &Transform, &Sprite, With<Enemy>)>,
+    mut active_enemies: ResMut<ActiveEnemies>,
+) {
 //     let mut despawned_entities: HashSet<Entity> = HashSet::new();
 //
 //     // iterate through the lasers
-//     for (laser_entity, laser_tf, laser_size) in laser_query.iter() {
+    for (laser_entity, laser_tf, laser_sprite, _) in laser_query.iter_mut() {
 //         if despawned_entities.contains(&laser_entity) {
 //             continue;
 //         }
 //
-//         let laser_scale = Vec2::from(laser_tf.scale.xy());
+        let laser_scale = Vec2::from(laser_tf.scale.xy());
 //
 //         // iterate through the enemies
-//         for (enemy_entity, enemy_tf, enemy_size) in enemy_query.iter() {
+        for (enemy_entity, enemy_tf, enemy_sprite, _) in enemy_query.iter_mut() {
 //             if despawned_entities.contains(&enemy_entity)
 //                 || despawned_entities.contains(&laser_entity)
 //             {
 //                 continue;
 //             }
 //
-//             let enemy_scale = Vec2::from(enemy_tf.scale.xy());
+            let enemy_scale = Vec2::from(enemy_tf.scale.xy());
 //
 //             // determine if collision
 //             let collision = collide(
@@ -286,7 +303,7 @@ fn setup(
 //
 //             // perform collision
 //             if let Some(_) = collision {
-//                 // remove the enemy
+//                 // remove the _enemy
 //                 commands.entity(enemy_entity).despawn();
 //                 despawned_entities.insert(enemy_entity);
 //                 enemy_count.0 -= 1;
@@ -298,9 +315,9 @@ fn setup(
 //                 // spawn the explosionToSpawn
 //                 commands.spawn(ExplosionToSpawn(enemy_tf.translation.clone()));
 //             }
-//         }
-//     }
-// }
+        }
+    }
+}
 //
 // fn enemy_laser_hit_player_system(
 //     mut commands: Commands,
