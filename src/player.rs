@@ -2,7 +2,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use bevy::window::PrimaryWindow;
-use crate::{Laser, LASER_SPRITE, Materials, Player, PLAYER_LASER_SIZE, PLAYER_SPRITE, PlayerReadyFire, SCALE, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
+use crate::{FromPlayer, Laser, LASER_SPRITE, Materials, Player, PLAYER_LASER_SIZE, PLAYER_RESPAWN_DELAY, PLAYER_SIZE, PLAYER_SPRITE, PlayerReadyFire, PlayerState, SCALE, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
 use crate::components::SpriteSize;
 
 //use crate::{GameTextures, PLAYER_LASER_SIZE, PLAYER_RESPAWN_DELAY, PLAYER_SIZE, PlayerState, SPRITE_SCALE, WinSize};
@@ -14,77 +14,67 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         //app.insert_resource(PlayerState::default())
         //app.add_system(player_spawn_system.run_if(on_timer(Duration::from_secs_f32(0.5))))
-        app.init_resource::<Materials>()
+        app
+            .init_resource::<Materials>()
+            .init_resource::<PlayerState>()
 
-            .add_startup_system(player_spawn_system)
+            .add_startup_system(player_spawn)
             .add_system(player_movement)
             //app.add_startup_stage("game_setup_actors", SystemStage::single(player_spawn_system))
             //.add_system(player_keyboard_event_system)
             .add_system(player_fire)
-            .add_system(laser_movement);
+            .add_system(laser_movement)
+            // Creamos un nuevo player al ser eliminado
+            .add_system(player_spawn.run_if(on_timer(Duration::from_secs_f32(0.5))));
     }
 }
 
-fn player_spawn_system(
+fn player_spawn(
     mut commands: Commands,
-    //mut player_state: ResMut<PlayerState>,
-    //time: Res<Time>,
+    mut player_state: ResMut<PlayerState>,
+    time: Res<Time>,
     //game_textures: Res<GameTextures>,
     //win_size: Res<WinSize>,
-    materials: Res<Materials>,
+    //materials: Res<Materials>,
     asset_server: Res<AssetServer>,
     //mut windows: Query<&Window, With<PrimaryWindow>>,
 ) {
     //let mut window = windows.get_single().unwrap();
 
-    // spawn un sprite
-    let bottom = -WIN_SIZE_HEIGHT / 2.;
+    let now = time.elapsed_seconds_f64();
+    let last_shot = player_state.last_shot;
 
-    commands.spawn(SpriteBundle {
-        sprite: Sprite {
-            color: Color::rgb(1., 0.7, 0.7),
-            custom_size: Some(Vec2::new(200.0, 100.0)),
-            ..default()
-        },
-        texture: asset_server.load(PLAYER_SPRITE),
-        //texture: materials.player_materials.clone(),
-        transform: Transform {
-            translation: Vec3::new(0., bottom + 75. / 4. + 5., 10.),
-            scale: Vec3::new(0.5, 0.5, 1.),
-            ..default()
-        },
-        ..default()
-    })
-        .insert(Player)
-        .insert(PlayerReadyFire(true))
-        .insert(Speed::default());
-    // let now = time.elapsed_seconds_f64();
-    // let last_shot = player_state.last_shot;
-    //
-    // if !player_state.on && (last_shot == -1. || now > last_shot + PLAYER_RESPAWN_DELAY) {
-    //     // add player
-    //     let bottom = -win_size.h / 2.;
-    //     commands
-    //         .spawn(SpriteBundle {
-    //             texture: game_textures.player.clone(),
-    //             transform: Transform {
-    //                 translation: Vec3::new(
-    //                     0.,
-    //                     bottom + PLAYER_SIZE.1 / 2. * SPRITE_SCALE + 5.,
-    //                     10.,
-    //                 ),
-    //                 scale: Vec3::new(SPRITE_SCALE, SPRITE_SCALE, 1.),
-    //                 ..Default::default()
-    //             },
-    //             ..Default::default()
-    //         })
-    //         .insert(Player)
-    //         .insert(SpriteSize::from(PLAYER_SIZE))
-    //         .insert(Movable { auto_despawn: false })
-    //         .insert(Velocity { x: 0., y: 0. });
-    //
-    //     player_state.spawned();
-    // }
+    if !player_state.on && (last_shot == -1. || now > last_shot + PLAYER_RESPAWN_DELAY) {
+
+        // añade player
+        let bottom = -WIN_SIZE_HEIGHT / 2.;
+
+        commands
+            .spawn(SpriteBundle {
+                // sprite: Sprite {
+                //     color: Color::rgb(1., 0.7, 0.7),
+                //     custom_size: Some(Vec2::new(200.0, 100.0)),
+                //     ..default()
+                // },
+                texture: asset_server.load(PLAYER_SPRITE),
+                //texture: materials.player_materials.clone(),
+                transform: Transform {
+                    translation: Vec3::new(
+                        0.,
+                        bottom + PLAYER_SIZE.1 / 2. * SCALE + 5.,
+                        10.),
+                    scale: Vec3::new(SCALE, SCALE, 1.),
+                    ..default()
+                },
+                ..default()
+            })
+            .insert(Player)
+            .insert(SpriteSize::from(PLAYER_SIZE))
+            .insert(PlayerReadyFire(true))
+            .insert(Speed::default());
+
+        player_state.spawned();
+    }
 }
 
 fn player_movement(
@@ -159,10 +149,10 @@ fn player_fire(
     mut commands: Commands,
     kb: Res<Input<KeyCode>>,
     //game_textures: Res<GameTextures>,
-    mut query: Query<(&Transform, &mut PlayerReadyFire, With<Player>)>,
+    mut query: Query<(&Transform, &mut PlayerReadyFire), With<Player>>,
     asset_server: Res<AssetServer>,
 ) {
-    for (player_tf, mut ready_fire, _) in query.iter_mut() {
+    for (player_tf, mut ready_fire) in query.iter_mut() {
         if ready_fire.0 && kb.pressed(KeyCode::Space) {
             let x = player_tf.translation.x;
             let y = player_tf.translation.y;
@@ -178,6 +168,7 @@ fn player_fire(
                     ..default()
                 })
                     .insert(Laser)
+                    .insert(FromPlayer)
                     .insert(SpriteSize::from(PLAYER_LASER_SIZE))
                     .insert(Speed::default());
             };
@@ -198,10 +189,10 @@ fn laser_movement(
     mut commands: Commands,
     kb: Res<Input<KeyCode>>,
     //game_textures: Res<GameTextures>,
-    mut query: Query<(Entity, &Speed, &mut Transform, With<Laser>)>,
+    mut query: Query<(Entity, &Speed, &mut Transform), (With<Laser>, With<FromPlayer>)>,
     asset_server: Res<AssetServer>,
 ) {
-    for (laser_entity, speed, mut laser_tf, _) in query.iter_mut() {
+    for (laser_entity, speed, mut laser_tf) in query.iter_mut() {
         let translation = &mut laser_tf.translation;
         translation.y += speed.0 * TIME_STEP;
         if translation.y > WIN_SIZE_HEIGHT {

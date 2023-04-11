@@ -2,7 +2,6 @@
 
 mod player;
 mod enemy;
-// mod _enemy;
 mod components;
 
 //use std::collections::HashSet;
@@ -18,6 +17,7 @@ use components::SpriteSize;
 //use bevy::sprite::collide_aabb::collide;
 use bevy::math::Vec3Swizzles;
 use bevy::sprite::collide_aabb::collide;
+use bevy::utils::HashSet;
 use crate::components::ExplosionTimer;
 
 //use crate::components::{Enemy, Explosion, ExplosionTimer, ExplosionToSpawn, FromEnemy, FromPlayer, Laser, Movable, Player, SpriteSize, Velocity};
@@ -28,35 +28,35 @@ use crate::components::ExplosionTimer;
 
 const PLAYER_SPRITE: &str = "player_a_01.png";
 const PLAYER_LASER_SPRITE: &str = "laser_a_01.png";
-// const PLAYER_SIZE: (f32, f32) = (144., 75.);
+const PLAYER_SIZE: (f32, f32) = (144., 75.);
 const LASER_SPRITE: &str = "laser_a_01.png";
 const PLAYER_LASER_SIZE: (f32, f32) = (9., 54.);
 
 const ENEMY_SPRITE: &str = "enemy_a_01.png";
 const ENEMY_SIZE: (f32, f32) = (144., 75.);
 const ENEMY_LASER_SPRITE: &str = "laser_b_01.png";
-// const ENEMY_LASER_SIZE: (f32, f32) = (17., 55.);
-//
+const ENEMY_LASER_SIZE: (f32, f32) = (17., 55.);
+
 const EXPLOSION_SHEET: &str = "explo_a_sheet.png";
 const EXPLOSION_LEN: usize = 16;
 
 const SCALE: f32 = 0.5;
-//
-// // endregion: --- Asset Constants
-//
-// // region:    --- Game Constants
-//
+
+// endregion: --- Asset Constants
+
+// region:    --- Game Constants
+
 const TIME_STEP: f32 = 1. / 60.;
 const WIN_SIZE_WIDTH: f32 = 598.0;
 const WIN_SIZE_HEIGHT: f32 = 676.0;
-// const BASE_SPEED: f32 = 500.;
-//
-// const PLAYER_RESPAWN_DELAY: f64 = 2.;
+const BASE_SPEED: f32 = 500.;
+
+const PLAYER_RESPAWN_DELAY: f64 = 2.;
 const ENEMY_MAX: u32 = 2;
-// const FORMATION_MEMBERS_MAX: u32 = 2;
-//
-// // endregion: --- Game Constants
-//
+const MAX_FORMATION_MEMBERS: u32 = 2;
+
+// endregion: --- Game Constants
+
 pub const APP_TITLE: &str = "Rust Invaders!";
 
 // region:    --- Resources
@@ -92,33 +92,33 @@ struct GameTextures {
 
 // #[derive(Resource)]
 // struct EnemyCount(u32);
-//
-// #[derive(Resource)]
-// struct PlayerState {
-//     on: bool,
-//     // alive
-//     last_shot: f64, // -1 if not shot
-// }
-//
-// impl Default for PlayerState {
-//     fn default() -> Self {
-//         Self {
-//             on: false,
-//             last_shot: -1.,
-//         }
-//     }
-// }
-//
-// impl PlayerState {
-//     pub fn shot(&mut self, time: f64) {
-//         self.on = false;
-//         self.last_shot = time;
-//     }
-//     pub fn spawned(&mut self) {
-//         self.on = true;
-//         self.last_shot = -1.;
-//     }
-// }
+
+#[derive(Resource)]
+struct PlayerState {
+    on: bool,
+    // alive
+    last_shot: f64, // -1 if not shot
+}
+
+impl Default for PlayerState {
+    fn default() -> Self {
+        Self {
+            on: false,
+            last_shot: -1.,
+        }
+    }
+}
+
+impl PlayerState {
+    pub fn shot(&mut self, time: f64) {
+        self.on = false;
+        self.last_shot = time;
+    }
+    pub fn spawned(&mut self) {
+        self.on = true;
+        self.last_shot = -1.;
+    }
+}
 
 #[derive(Resource)]
 struct ActiveEnemies(u32);
@@ -136,6 +136,9 @@ impl Default for ActiveEnemies {
 struct Player;
 
 #[derive(Component)]
+struct FromPlayer;
+
+#[derive(Component)]
 struct PlayerReadyFire(bool);
 
 #[derive(Component)]
@@ -143,6 +146,9 @@ struct Laser;
 
 #[derive(Component)]
 struct Enemy;
+
+#[derive(Component)]
+struct FromEnemy;
 
 #[derive(Component)]
 struct Explosion;
@@ -173,22 +179,19 @@ fn main() {
     let primary_window = Some(window);
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin { primary_window, ..default() }))
-        //.add_plugins(DefaultPlugins)
-        //.insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
+
+        .insert_resource(ClearColor(Color::rgb(0.04, 0.04, 0.04)))
         .init_resource::<ActiveEnemies>()
+
         .add_startup_system(setup)
 
         .add_plugin(PlayerPlugin)
         .add_plugin(EnemyPlugin)
         .add_system(explosion_to_spawn)
-//         .add_plugin(EnemyPlugin)
-//
 
-//
 //         .add_system(movable_system)
-        .add_system(laser_hit_enemy)
-//         .add_system(enemy_laser_hit_player_system)
-
+        .add_system(player_laser_hit_enemy)
+        .add_system(enemy_laser_hit_player)
         .add_system(animate_explosion)
 //
         .run();
@@ -277,17 +280,17 @@ fn setup(
 //     }
 // }
 
-fn laser_hit_enemy(
+fn player_laser_hit_enemy(
     mut commands: Commands,
     //mut enemy_count: ResMut<EnemyCount>,
-    mut laser_query: Query<(Entity, &Transform, &SpriteSize, With<Laser>)>,
+    mut laser_query: Query<(Entity, &Transform, &SpriteSize), (With<Laser>, With<FromPlayer>)>,
     mut enemy_query: Query<(Entity, &Transform, &SpriteSize, With<Enemy>)>,
     mut active_enemies: ResMut<ActiveEnemies>,
 ) {
-//     let mut despawned_entities: HashSet<Entity> = HashSet::new();
+    let mut enemies_blasted: HashSet<Entity> = HashSet::new();
 //
 //     // iterate through the lasers
-    for (laser_entity, laser_tf, laser_size, _) in laser_query.iter_mut() {
+    for (laser_entity, laser_tf, laser_size) in laser_query.iter_mut() {
 //         if despawned_entities.contains(&laser_entity) {
 //             continue;
 //         }
@@ -314,62 +317,66 @@ fn laser_hit_enemy(
 
             // perform collision
             if let Some(_) = collision {
-                // remove the _enemy
-                commands.entity(enemy_entity).despawn();
-                //despawned_entities.insert(enemy_entity);
-                active_enemies.0 -= 1;
+                if enemies_blasted.get(&enemy_entity).is_none() {
+
+                    // remove the enemy
+                    commands.entity(enemy_entity).despawn();
+                    active_enemies.0 -= 1;
+
+                    // spawn the explosionToSpawn
+                    commands
+                        .spawn(ExplosionToSpawn(enemy_tf.translation.clone()));
+
+                    enemies_blasted.insert(enemy_entity);
+                }
 
                 // remove the laser
                 commands.entity(laser_entity).despawn();
                 //despawned_entities.insert(laser_entity);
-
-                // spawn the explosionToSpawn
-                commands.spawn(ExplosionToSpawn(enemy_tf.translation.clone()));
             }
         }
     }
 }
 
-//
-// fn enemy_laser_hit_player_system(
-//     mut commands: Commands,
-//     mut player_state: ResMut<PlayerState>,
-//     time: Res<Time>,
-//     laser_query: Query<(Entity, &Transform, &SpriteSize), (With<Laser>, With<FromEnemy>)>,
-//     player_query: Query<(Entity, &Transform, &SpriteSize), With<Player>>,
-// ) {
-//     if let Ok((player_entity, player_tf, player_size)) = player_query.get_single() {
-//         let player_scale = Vec2::from(player_tf.scale.xy());
-//
-//         for (laser_entity, laser_tf, laser_size) in laser_query.iter() {
-//             let laser_scale = Vec2::from(laser_tf.scale.xy());
-//
-//             // determine if collision
-//             let collision = collide(
-//                 laser_tf.translation,
-//                 laser_size.0 * laser_scale,
-//                 player_tf.translation,
-//                 player_size.0 * player_scale,
-//             );
-//
-//             // perform the collision
-//             if let Some(_) = collision {
-//                 // remove the player
-//                 commands.entity(player_entity).despawn();
-//                 player_state.shot(time.elapsed_seconds_f64());
-//
-//                 // remove the laser
-//                 commands.entity(laser_entity).despawn();
-//
-//                 // spawn the explosionToSpawn
-//                 commands.spawn(ExplosionToSpawn(player_tf.translation.clone()));
-//
-//                 break;
-//             }
-//         }
-//     }
-// }
-//
+fn enemy_laser_hit_player(
+    mut commands: Commands,
+    mut player_state: ResMut<PlayerState>,
+    time: Res<Time>,
+    laser_query: Query<(Entity, &Transform, &SpriteSize), (With<Laser>, With<FromEnemy>)>,
+    player_query: Query<(Entity, &Transform, &SpriteSize), With<Player>>,
+) {
+    if let Ok((player_entity, player_tf, player_size)) = player_query.get_single() {
+        let player_scale = Vec2::from(player_tf.scale.xy());
+        // Para cada laser de enemigo
+        for (laser_entity, laser_tf, laser_size) in laser_query.iter() {
+            let laser_scale = Vec2::from(laser_tf.scale.xy());
+
+            // determine if collision
+            let collision = collide(
+                laser_tf.translation,
+                laser_size.0 * laser_scale,
+                player_tf.translation,
+                player_size.0 * player_scale,
+            );
+
+            // perform the collision
+            if let Some(_) = collision {
+                // borrar el player
+                commands.entity(player_entity).despawn();
+                player_state.shot(time.elapsed_seconds_f64());
+
+                // borrar el laser
+                commands.entity(laser_entity).despawn();
+
+                // crear explosionToSpawn
+                commands.spawn(ExplosionToSpawn(player_tf.translation.clone()));
+
+                break;
+            }
+        }
+    }
+}
+
 fn explosion_to_spawn(
     mut commands: Commands,
     game_textures: Res<GameTextures>,
