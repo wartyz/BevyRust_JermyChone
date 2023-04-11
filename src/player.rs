@@ -2,7 +2,8 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use bevy::window::PrimaryWindow;
-use crate::{Laser, LASER_SPRITE, Materials, Player, PLAYER_SPRITE, PlayerReadyFire, SCALE, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
+use crate::{Laser, LASER_SPRITE, Materials, Player, PLAYER_LASER_SIZE, PLAYER_SPRITE, PlayerReadyFire, SCALE, Speed, TIME_STEP, WIN_SIZE_HEIGHT};
+use crate::components::SpriteSize;
 
 //use crate::{GameTextures, PLAYER_LASER_SIZE, PLAYER_RESPAWN_DELAY, PLAYER_SIZE, PlayerState, SPRITE_SCALE, WinSize};
 //use crate::components::{FromPlayer, Laser, Movable, Player, SpriteSize, Velocity};
@@ -177,6 +178,7 @@ fn player_fire(
                     ..default()
                 })
                     .insert(Laser)
+                    .insert(SpriteSize::from(PLAYER_LASER_SIZE))
                     .insert(Speed::default());
             };
             let x_offset = 144.0 / 4.0 - 5.0;

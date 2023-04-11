@@ -2,7 +2,8 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
 use rand::{Rng, thread_rng};
-use crate::{ActiveEnemies, Enemy, ENEMY_SPRITE, SCALE, WIN_SIZE_HEIGHT, WIN_SIZE_WIDTH};
+use crate::{ActiveEnemies, Enemy, ENEMY_SPRITE, SCALE, WIN_SIZE_HEIGHT, WIN_SIZE_WIDTH, ENEMY_SIZE, ENEMY_MAX};
+use crate::components::SpriteSize;
 
 pub struct EnemyPlugin;
 
@@ -22,7 +23,7 @@ fn enemy_spawn(
     asset_server: Res<AssetServer>,
     //mut windows: Query<&Window, With<PrimaryWindow>>,
 ) {
-    if active_enemies.0 < 1 {
+    if active_enemies.0 < ENEMY_MAX {
         // calcular la posición aleatória
         let mut rng = thread_rng();
         let w_span = WIN_SIZE_WIDTH / 2. - 100.;
@@ -47,7 +48,8 @@ fn enemy_spawn(
             },
             ..default()
         })
-            .insert(Enemy);
+            .insert(Enemy)
+            .insert(SpriteSize::from(ENEMY_SIZE));
         active_enemies.0 += 1;
     }
 }
